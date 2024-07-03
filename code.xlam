@@ -1,0 +1,212 @@
+Sub AgruparMovimientosBancarios()
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Sheets("Sheet1") ' Cambia "Sheet1" al nombre de tu hoja de movimientos
+
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+
+    ' Crear un diccionario para almacenar los datos agrupados
+    Dim dict As Object
+    Set dict = CreateObject("Scripting.Dictionary")
+
+    Dim i As Long
+    For i = 2 To lastRow
+        Dim fecha As Date
+        fecha = ws.Cells(i, 1).Value ' Suponiendo que la fecha operativa está en la columna A
+
+        Dim concepto As String
+        concepto = ws.Cells(i, 2).Value ' Suponiendo que el concepto está en la columna B
+
+        Dim importe As Double
+        importe = ws.Cells(i, 3).Value ' Suponiendo que el importe está en la columna C
+
+        ' Extraer el mes y año de la fecha operativa
+        Dim mes As String
+        mes = Format(fecha, "YYYY-MM")
+
+        ' Determinar si es un bizum o una compra con tarjeta pequeña
+        If InStr(1, LCase(concepto), "bizum") > 0 Then
+            concepto = "Bizum"
+        ElseIf InStr(1, concepto, "COMPRA TARJ.") = 1 And importe < 6 Then
+            concepto = "COMPRAS TARJETA PEQUEÑAS"
+        End If
+
+        ' Crear una clave única para el mes y el concepto agrupado
+        Dim uniqueKey As String
+        uniqueKey = mes & "|" & concepto
+
+        ' Sumar los importes agrupados por mes y concepto
+        If dict.exists(uniqueKey) Then
+            dict(uniqueKey) = dict(uniqueKey) + importe
+        Else
+            dict.Add uniqueKey, importe
+        End If
+    Next i
+
+    ' Crear una nueva hoja para los resultados
+    Dim resultWs As Worksheet
+    Set resultWs = ThisWorkbook.Sheets.Add
+    resultWs.Name = "AgrupadosPorMesConcepto"
+
+    ' Escribir encabezados
+    resultWs.Cells(1, 1).Value = "Mes"
+    resultWs.Cells(1, 2).Value = "Concepto"
+    resultWs.Cells(1, 3).Value = "Total Importe"
+
+    ' Escribir los resultados agrupados en la nueva hoja
+    Dim row As Long
+    row = 2
+    Dim key As Variant
+    For Each key In dict.keys
+        Dim parts() As String
+        parts = Split(key, "|")
+        resultWs.Cells(row, 1).Value = parts(0)
+        resultWs.Cells(row, 2).Value = parts(1)
+        resultWs.Cells(row, 3).Value = dict(key)
+        row = row + 1
+    Next key
+End Sub
+
+Sub CrearBalanceMensualConGraficos()
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Sheets("Sheet1") ' Cambia "Sheet1" al nombre de tu hoja de movimientos
+    
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+
+    ' Crear un diccionario para almacenar los balances mensuales
+    Dim dict As Object
+    Set dict = CreateObject("Scripting.Dictionary")
+
+    Dim i As Long
+    For i = 2 To lastRow
+        Dim fecha As Date
+        fecha = ws.Cells(i, 1).Value ' Suponiendo que la fecha está en la columna A
+
+        Dim mes As String
+        mes = Format(fecha, "YYYY-MM") ' Formatear la fecha para obtener el mes y año
+
+        Dim importe As Double
+        importe = ws.Cells(i, 3).Value ' Suponiendo que el importe está en la columna C
+
+        ' Sumar los importes agrupados por mes
+        If dict.exists(mes) Then
+            dict(mes) = dict(mes) + importe
+        Else
+            dict.Add mes, importe
+        End If
+    Next i
+
+    ' Crear una nueva hoja para los resultados
+    Dim resultWs As Worksheet
+    Set resultWs = ThisWorkbook.Sheets.Add
+    resultWs.Name = "BalanceMensual"
+
+    ' Escribir encabezados
+    resultWs.Cells(1, 1).Value = "Mes"
+    resultWs.Cells(1, 2).Value = "Balance"
+
+    ' Escribir los resultados agrupados en la nueva hoja
+    Dim row As Long
+    row = 2
+    Dim key As Variant
+    For Each key In dict.keys
+        resultWs.Cells(row, 1).Value = key
+        resultWs.Cells(row, 2).Value = dict(key)
+        row = row + 1
+    Next key
+
+    ' Crear gráficos
+    Dim chartObj As ChartObject
+    Set chartObj = resultWs.ChartObjects.Add(Left:=50, Width:=600, Top:=50, Height:=300)
+    With chartObj.Chart
+        .SetSourceData Source:=resultWs.Range("A1:B" & row - 1)
+        .ChartType = xlColumnClustered
+        .HasTitle = True
+        .ChartTitle.Text = "Balance Mensual"
+        .Axes(xlCategory, xlPrimary).HasTitle = True
+        .Axes(xlCategory, xlPrimary).AxisTitle.Text = "Mes"
+        .Axes(xlValue, xlPrimary).HasTitle = True
+        .Axes(xlValue, xlPrimary).AxisTitle.Text = "Balance"
+    End With
+
+    ' Crear gráfico comparativo de ingresos y gastos
+    Set chartObj = resultWs.ChartObjects.Add(Left:=50, Width:=600, Top:=400, Height:=300)
+    With chartObj.Chart
+        .SetSourceData Source:=resultWs.Range("A1:B" & row - 1)
+        .ChartType = xlLineMarkers
+        .HasTitle = True
+        .ChartTitle.Text = "Comparativa de Ingresos y Gastos"
+        .Axes(xlCategory, xlPrimary).HasTitle = True
+        .Axes(xlCategory, xlPrimary).AxisTitle.Text = "Mes"
+        .Axes(xlValue, xlPrimary).HasTitle = True
+        .Axes(xlValue, xlPrimary).AxisTitle.Text = "Importe"
+    End With
+
+    ' Calcular el patrimonio neto sin tener en cuenta los ingresos y gastos
+    Dim valorPiso As Double
+    valorPiso = 0
+
+    Dim valorCoche As Double
+    valorCoche = 0
+
+    Dim dineroRevolut As Double
+    dineroRevolut = 0
+
+    Dim dineroSabadell As Double
+    dineroSabadell = 0
+
+    Dim deudaHipoteca As Double
+    deudaHipoteca = 0
+
+    Dim deudaEstudios As Double
+    deudaEstudios = 0
+
+    Dim patrimonioNeto As Double
+    patrimonioNeto = valorPiso + valorCoche + dineroRevolut + dineroSabadell - deudaHipoteca - deudaEstudios
+
+    ' Crear una nueva hoja para el patrimonio neto
+    Dim patrimonioWs As Worksheet
+    Set patrimonioWs = ThisWorkbook.Sheets.Add
+    patrimonioWs.Name = "PatrimonioNeto"
+
+    ' Escribir encabezados
+    patrimonioWs.Cells(1, 1).Value = "Activo"
+    patrimonioWs.Cells(1, 2).Value = "Valor"
+
+    ' Escribir los valores de los activos y pasivos
+    patrimonioWs.Cells(2, 1).Value = "Valor del Piso"
+    patrimonioWs.Cells(2, 2).Value = valorPiso
+
+    patrimonioWs.Cells(3, 1).Value = "Valor del Coche"
+    patrimonioWs.Cells(3, 2).Value = valorCoche
+
+    patrimonioWs.Cells(4, 1).Value = "Dinero en Revolut"
+    patrimonioWs.Cells(4, 2).Value = dineroRevolut
+
+    patrimonioWs.Cells(5, 1).Value = "Dinero en Banco Sabadell"
+    patrimonioWs.Cells(5, 2).Value = dineroSabadell
+
+    patrimonioWs.Cells(6, 1).Value = "Deuda Hipotecaria"
+    patrimonioWs.Cells(6, 2).Value = -deudaHipoteca
+
+    patrimonioWs.Cells(7, 1).Value = "Préstamo de Estudios"
+    patrimonioWs.Cells(7, 2).Value = -deudaEstudios
+
+    ' Calcular y escribir el patrimonio neto
+    patrimonioWs.Cells(8, 1).Value = "Patrimonio Neto"
+    patrimonioWs.Cells(8, 2).Value = patrimonioNeto
+
+    ' Crear gráfico de patrimonio neto
+    Set chartObj = patrimonioWs.ChartObjects.Add(Left:=50, Width:=600, Top:=50, Height:=300)
+    With chartObj.Chart
+        .SetSourceData Source:=patrimonioWs.Range("A1:B7")
+        .ChartType = xlBarClustered
+        .HasTitle = True
+        .ChartTitle.Text = "Patrimonio Neto"
+        .Axes(xlCategory, xlPrimary).HasTitle = True
+        .Axes(xlCategory, xlPrimary).AxisTitle.Text = "Activo"
+        .Axes(xlValue, xlPrimary).HasTitle = True
+        .Axes(xlValue, xlPrimary).AxisTitle.Text = "Valor"
+    End With
+End Sub
